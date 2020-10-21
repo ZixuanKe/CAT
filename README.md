@@ -13,7 +13,7 @@ This repository contains the code for our  NeuIPS 2020 Paper **"Continual Learni
 
 **/dataloader**: contained dataloader for mixed sequences of (EMNIST, F-EMNIST) and (CIFAR100, F-CelebA)
 
-**/reference**: additional code for baselines (specifically UCL, HyperNet and RESNet)
+**/reference**: additional code for baselines (specifically UCL, HyperNet and RPSNet)
 
 **/approaches**: code for training
 
@@ -27,7 +27,7 @@ This repository contains the code for our  NeuIPS 2020 Paper **"Continual Learni
 
 **run_train_mixemnist_mlp_hat_10_10_ncl.sh**: Run M(EMNIST-10, F-EMNIST) with ONE
 
-**run_train_mixemnist_mlp_remove_att_10_10_ncl** Run M(EMNIST-10, F-EMNIST) with MTCL without attention
+**run_train_mixemnist_mlp_remove_att_10_10_ncl** Run M(EMNIST-10, F-EMNIST) with CAT without attention
 
 **run_train_mixemnist_mlp_10_20_ncl.sh**: Run M(EMNIST-20, F-EMNIST) with NCL
 
