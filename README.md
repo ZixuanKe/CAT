@@ -3,7 +3,7 @@
 
 # CAT (Continual learning with forgetting Avoidance and knowledge Transfer)
 
-This repository contains the code for our  NeuIPS 2020 Paper **"Continual Learning of a Mixed Sequence of Similar and Dissimilar Tasks"** by Zixuan Ke, Bing Liu and Xingchang Huang.
+This repository contains the code for our  NeurIPS 2020 Paper **"Continual Learning of a Mixed Sequence of Similar and Dissimilar Tasks"** by Zixuan Ke, Bing Liu and Xingchang Huang.
 
 ## Files
 
