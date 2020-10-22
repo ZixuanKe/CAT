@@ -20,7 +20,7 @@ Existing research on continual learning of a sequence of tasks focused on dealin
 
 ## Running
 ### Format
-    run_train_[dataset]_[network]_[approach_specification]_[#similar]_[#dissimilar]_[approach]
+    run_train_[dataset]_[network]_[approach_specification]_[#similar]_[#dissimilar]_[approach].sh
     [dataset]: mixemnist/mixceleba
     [network]: mlp/alexnet
     [approch_specification]: optional, e.g. hat, remove_att, ewc...

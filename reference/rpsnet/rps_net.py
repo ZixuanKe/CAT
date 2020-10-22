@@ -17,7 +17,7 @@ from __future__ import print_function
 # import torchvision.transforms as transforms
 # import torchvision.datasets as datasets
 # import copy
-# import torch
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
 # import torch.optim as optim
@@ -120,7 +120,7 @@ class RPS_net(nn.Module):
                 self.final_layers.append(self.final_layer1)
 
             
-            self.cuda()
+            # self.cuda()
 
         def forward(self, x, path, last):
 
@@ -320,7 +320,7 @@ class RPS_net_cifar(nn.Module):
                 self.final_layers.append(self.final_layer1)
 
             
-            self.cuda()
+            # self.cuda()
 
         def forward(self, x, path, last):
 
@@ -420,10 +420,11 @@ class RPS_net_cifar(nn.Module):
         
 class RPS_net_mlp(nn.Module):
 
-        def __init__(self, args):
+        def __init__(self, args, taskcla):
             super(RPS_net_mlp, self).__init__()
             self.args = args
-            self.final_layers = []
+            self.taskcla = taskcla
+            self.final_layers = torch.nn.ModuleList()
             self.init(None)
 
         def init(self, best_path):
@@ -438,7 +439,7 @@ class RPS_net_mlp(nn.Module):
             #mlp1
             for i in range(self.args.M):
 #                 exec("self.m1" + str(i) + " = nn.Sequential(nn.Linear(784, 256),nn.BatchNorm2d(256),nn.ReLU())")
-                exec("self.m1" + str(i) + " = nn.Linear(784, 400)")
+                exec("self.m1" + str(i) + " = nn.Linear(3072, 400)") # 784, 3072
                 exec("self.mlp1.append(self.m1" + str(i) + ")")
                 
                 
@@ -448,13 +449,20 @@ class RPS_net_mlp(nn.Module):
                 exec("self.mlp2.append(self.m2" + str(i) + ")")
                 
 
-            if len(self.final_layers) < 1:
-                self.final_layer1 = nn.Linear(128, 10)
-                self.final_layers.append(self.final_layer1)
+            # if len(self.final_layers) < 1:
+            #     self.final_layer1 = nn.Linear(128, 5) # class: 10
+            #     self.final_layers.append(self.final_layer1)
+
+            for t,n in self.taskcla:
+                self.final_layers.append(torch.nn.Linear(128,n))
             
-            self.cuda()
+            # self.cuda()
 
         def forward(self, x, path, last):
+            # print ('input:',x.size())
+            d = x.size(1)*x.size(2)*x.size(3)
+            x = x.view(-1,d)
+            # print ('input:',x.size())
 
             M = self.args.M
            
@@ -472,6 +480,7 @@ class RPS_net_mlp(nn.Module):
                     y += self.mlp2[j](x)
             x = F.relu(y)
             
+            # print (last, self.final_layers[last])
             x = self.final_layers[last](x)
             
             return x

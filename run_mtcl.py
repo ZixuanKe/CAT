@@ -40,7 +40,7 @@ elif args.experiment=='mixceleba':
     from dataloaders import mixceleba as dataloader
 
 # Args -- Approach
-if 'mtcl_ncl' in args.approach: #MTCL refers to CAT
+if 'mtcl_ncl' in args.approach:
     from approaches import mtcl_ncl as approach
 
 if 'mlp_mtcl' in args.approach:

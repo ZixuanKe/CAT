@@ -30,7 +30,7 @@ class Net(torch.nn.Module):
         self.N = 3
         self.M = 16
         #"""
-        self.L = 2      # our architecture has 5 layers
+        self.L = 2      # our architecture has 2 layers
 
         self.bestPath = -1 * np.ones((self.ntasks,self.L,self.N),dtype=np.int) #we need to remember this between the tasks
 

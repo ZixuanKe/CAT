@@ -16,6 +16,7 @@ def get_best_model(task_search, checkpoint):
     best_acc = []
     best_acc_b = []
     for file in log_files_b:
+        # print (file)
         try:
             f = np.loadtxt(checkpoint+"/"+file, skiprows=1)
             best_acc.append(max(f[-1,-1], f[-1,-2]) )
@@ -23,8 +24,8 @@ def get_best_model(task_search, checkpoint):
         except:
             pass
 
-    bets_acc = np.array(best_acc)
-    bets_acc_b = np.array(best_acc_b)
+    best_acc = np.array(best_acc)
+    best_acc_b = np.array(best_acc_b)
 
     a = np.argmax(best_acc)
     print(best_acc[a], best_acc_b[a])
@@ -78,3 +79,43 @@ def get_free_path(fixed_path):
 
 
 def flatten_list(a): return np.concatenate(a).ravel()
+
+
+
+
+
+
+
+
+def print_model_report(model):
+    print('-'*100)
+    print(model)
+    print('Dimensions =',end=' ')
+    count=0
+    for p in model.parameters():
+        print(p.size(),end=' ')
+        count+=np.prod(p.size())
+    print()
+    print('Num parameters = %s'%(human_format(count)))
+    print('-'*100)
+    return count
+
+def human_format(num):
+    magnitude=0
+    while abs(num)>=1000:
+        magnitude+=1
+        num/=1000.0
+    return '%.1f%s'%(num,['','K','M','G','T','P'][magnitude])
+
+def print_optimizer_config(optim):
+    if optim is None:
+        print(optim)
+    else:
+        print(optim,'=',end=' ')
+        opt=optim.param_groups[0]
+        for n in opt.keys():
+            if not n.startswith('param'):
+                print(n+':',opt[n],end=', ')
+        print()
+    return
+

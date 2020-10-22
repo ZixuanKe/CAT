@@ -33,7 +33,7 @@ import sys
 import random
 
 
-from rps_net import RPS_net_cifar
+from rps_net import RPS_net_cifar, RPS_net_mlp
 from learner import Learner
 from util import *
 from cifar_dataset import CIFAR100
@@ -73,7 +73,10 @@ state = {key:value for key, value in args.__dict__.items() if not key.startswith
 print(state)
 
 # Use CUDA
+
 use_cuda = torch.cuda.is_available()
+device = torch.device('cuda:0' if use_cuda else 'cpu')
+
 seed = random.randint(1, 10000)
 random.seed(seed)
 torch.manual_seed(seed)
@@ -86,7 +89,9 @@ if use_cuda:
 def main():
 
 
-    model = RPS_net_cifar(args).cuda() 
+    # model = RPS_net_cifar(args).to(device)#.cuda() 
+    model = RPS_net_mlp(args).to(device)#.cuda() 
+    
     print('    Total params: %.2fM' % (sum(p.numel() for p in model.parameters())/1000000.0))
 
     
@@ -118,10 +123,11 @@ def main():
     
     start_sess = int(sys.argv[2])
     test_case = sys.argv[1]
+    # print (start_sess, test_case)
     args.test_case = test_case
 
     inds_all_sessions=pickle.load(open(args.labels_data,'rb'))
-
+    
         
     for ses in range(start_sess, start_sess+1):
         if(ses==0):

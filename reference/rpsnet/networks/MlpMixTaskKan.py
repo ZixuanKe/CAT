@@ -1,0 +1,276 @@
+import sys
+import torch
+import math
+import utils
+import torch.nn.functional as F
+
+class Net(torch.nn.Module):
+
+    def __init__(self,inputsize,taskcla,nlayers=2,nhid=2000,pdrop1=0.2,pdrop2=0.5):
+        super(Net,self).__init__()
+
+        ncha,size,size_height=inputsize
+        self.taskcla=taskcla
+
+        self.nlayers=nlayers
+        self.relu=torch.nn.ReLU()
+        self.drop1=torch.nn.Dropout(pdrop1)
+        self.drop2=torch.nn.Dropout(pdrop2)
+        self.nhid=nhid
+        self.gate=torch.nn.Sigmoid()
+
+        self.ac = Acessibility(nhid,ncha,size,size_height,self.taskcla)
+        self.mcl = MainContinualLearning(nhid,ncha,size,size_height,self.taskcla)
+        # self.last_layers = LastLayer(nhid,self.taskcla)
+        self.transfer_layers = TransferLayer(self.taskcla)
+
+
+        print('MlpTaskKan')
+
+
+        """ (e.g., used with compression experiments)
+        lo,hi=0,2
+        self.efc1.weight.data.uniform_(lo,hi)
+        self.efc2.weight.data.uniform_(lo,hi)
+        self.efc3.weight.data.uniform_(lo,hi)
+        #"""
+
+        return
+
+
+    # progressive style
+    def forward(self,t,x,s=1,phase=None,smax=None,args=None,
+                pre_mask=None, pre_task=None):
+        # Gates
+        if phase==None or args==None or self.nlayers>2:
+            raise NotImplementedError
+
+        if phase == 'transfer':
+            gfc1,gfc2=pre_mask
+            max_masks=pre_mask
+
+        if 'mcl' in phase or 'ac' in phase:
+            max_masks=self.mask(t,s=s,phase=phase,smax=smax,args=args)
+            gfc1,gfc2=max_masks
+
+
+
+
+        # Gated
+        h=self.drop1(x.view(x.size(0),-1))
+
+        h=self.drop2(self.relu(self.mcl.fc1(h)))
+        h=h*gfc1.expand_as(h)
+
+        h=self.drop2(self.relu(self.mcl.fc2(h)))
+        h=h*gfc2.expand_as(h)
+
+        if phase == 'ac':
+            y=[]
+            for t,i in self.taskcla:
+                y.append(self.ac.last[t](h))
+            return y,max_masks
+
+        elif phase == 'mcl':
+            y=[]
+            for t,i in self.taskcla:
+                y.append(self.mcl.last[t](h))
+            return y,max_masks
+
+        elif phase == 'transfer':
+            y=[]
+            for t,i in self.taskcla:
+                y.append(self.transfer_layers.transfer[pre_task][t](self.mcl.last[pre_task](h)))
+            return y
+
+    def mask(self,t,s=1,phase=None,smax=None,args=None):
+        if self.nlayers>2 or args==None or phase==None:
+            raise NotImplementedError
+
+        if t>0:
+            if phase == 'ac':
+                ac_gfc1=self.gate(s*self.ac.efc1(t))
+                ac_gfc2=self.gate(s*self.ac.efc2(t))
+
+                gfc1=ac_gfc1
+                gfc2=ac_gfc2
+
+
+            elif phase == 'mcl' or phase == 'transfer':
+                ac_gfc1=self.gate(smax*self.ac.efc1(t))
+                ac_gfc2=self.gate(smax*self.ac.efc2(t))
+
+                mcl_gfc1=self.gate(s*self.mcl.efc1(t))
+                mcl_gfc2=self.gate(s*self.mcl.efc2(t))
+
+                if 'max' in args.note:
+                    gfc1=torch.max(mcl_gfc1,ac_gfc1)
+                    gfc2=torch.max(mcl_gfc2,ac_gfc2)
+
+                elif 'norm' in args.note:
+                    gfc1=mcl_gfc1
+                    gfc2=mcl_gfc2
+
+
+        elif t==0:
+            if phase == 'ac':
+                ac_gfc1=self.gate(s*self.ac.efc1(t))
+                ac_gfc1=torch.ones_like(ac_gfc1)
+
+                ac_gfc2=self.gate(s*self.ac.efc2(t))
+                ac_gfc2=torch.ones_like(ac_gfc2)
+
+                gfc1=ac_gfc1
+                gfc2=ac_gfc2
+
+            elif phase == 'mcl' or phase == 'transfer':
+
+                mcl_gfc1=self.gate(s*self.mcl.efc1(t))
+                mcl_gfc2=self.gate(s*self.mcl.efc2(t))
+
+                gfc1=mcl_gfc1
+                gfc2=mcl_gfc2
+
+        return [gfc1,gfc2]
+
+
+    def ac_mask(self,t,phase=None,smax=None,args=None):
+        if self.nlayers>2 or args==None or phase==None:
+            raise NotImplementedError
+
+        if t>0:
+            ac_gfc1=self.gate(smax*self.ac.efc1(t))
+            ac_gfc2=self.gate(smax*self.ac.efc2(t))
+
+        elif t==0:
+            ac_gfc1=self.gate(smax*self.ac.efc1(t))
+            ac_gfc1=torch.ones_like(ac_gfc1)
+
+            ac_gfc2=self.gate(smax*self.ac.efc2(t))
+            ac_gfc2=torch.ones_like(ac_gfc2)
+
+        return [ac_gfc1,ac_gfc2]
+
+    def get_view_for(self,n,masks):
+
+        gfc1,gfc2=masks
+        if n=='mcl.fc1.weight':
+            return gfc1.data.view(-1,1).expand_as(self.mcl.fc1.weight)
+        elif n=='mcl.fc1.bias':
+            return gfc1.data.view(-1)
+        elif n=='mcl.fc2.weight':
+            post=gfc2.data.view(-1,1).expand_as(self.mcl.fc2.weight)
+            pre=gfc1.data.view(1,-1).expand_as(self.mcl.fc2.weight)
+            return torch.min(post,pre)
+        elif n=='mcl.fc2.bias':
+            return gfc2.data.view(-1)
+        return None
+
+
+    def ac_get_view_for(self,n,masks):
+        gfc1,gfc2=masks
+
+        # gfc1_inaccessible = (torch.round(gfc1) == 0).sum().item()
+        # gfc1_accessible = (torch.round(gfc1) == 1).sum().item()
+        #
+        # print('original gfc1_inaccessible: ',gfc1_inaccessible)
+        # print('original gfc1_accessible: ',gfc1_accessible)
+        #
+        # gfc2_inaccessible = (torch.round(gfc2) == 0).sum().item()
+        # gfc2_accessible = (torch.round(gfc2) == 1).sum().item()
+        #
+        # print('original gfc2_inaccessible: ',gfc2_inaccessible)
+        # print('original gfc2_accessible: ',gfc2_accessible)
+
+
+        if n=='ac.fc1.weight':
+            return gfc1.data.view(-1,1).expand_as(self.ac.fc1.weight)
+        elif n=='ac.fc1.bias':
+            return gfc1.data.view(-1)
+        elif n=='ac.fc2.weight':
+            post=gfc2.data.view(-1,1).expand_as(self.ac.fc2.weight)
+            pre=gfc1.data.view(1,-1).expand_as(self.ac.fc2.weight)
+            return torch.min(post,pre)
+        elif n=='ac.fc2.bias':
+            return gfc2.data.view(-1)
+        return None
+
+class Acessibility(torch.nn.Module):
+
+    def __init__(self,nhid,ncha,size,size_height,taskcla):
+
+        super(Acessibility, self).__init__()
+
+        self.efc1=torch.nn.Embedding(len(taskcla),nhid)
+        self.efc2=torch.nn.Embedding(len(taskcla),nhid)
+
+        # if 'celeba' in args.experiment:
+        #     self.fc1=torch.nn.Linear(ncha*size*size_height,nhid)
+        # else:
+        #     self.fc1=torch.nn.Linear(ncha*size*size,nhid)
+
+        self.fc1=torch.nn.Linear(ncha*size*size,nhid)
+        # self.fc1=torch.nn.Linear(ncha*size*size,nhid)
+        self.fc2=torch.nn.Linear(nhid,nhid)
+
+        self.u1 = torch.nn.Linear(nhid, nhid)
+        self.v1 = torch.nn.Linear(nhid, nhid)
+        self.a1 = torch.nn.Parameter(torch.Tensor(1, nhid))
+        self.a1.data.uniform_(0, 0.1)
+
+        self.u2 = torch.nn.Linear(nhid, nhid)
+        self.v2 = torch.nn.Linear(nhid, nhid)
+        self.a2 = torch.nn.Parameter(torch.Tensor(1, nhid))
+        self.a2.data.uniform_(0, 0.1)
+
+        self.w1 = torch.nn.Linear(nhid, nhid)
+        self.w2 = torch.nn.Linear(nhid, nhid)
+
+        self.last=torch.nn.ModuleList()
+        for t,n in taskcla:
+            self.last.append(torch.nn.Linear(nhid,n))
+
+class MainContinualLearning(torch.nn.Module):
+
+    def __init__(self,nhid,ncha,size,size_height,taskcla):
+
+        super(MainContinualLearning, self).__init__()
+
+        self.efc1=torch.nn.Embedding(len(taskcla),nhid)
+        self.efc2=torch.nn.Embedding(len(taskcla),nhid)
+
+        # if 'celeba' in args.experiment:
+        #     self.fc1=torch.nn.Linear(ncha*size*size_height,nhid)
+        # else:
+        #     self.fc1=torch.nn.Linear(ncha*size*size,nhid)
+        self.fc1=torch.nn.Linear(ncha*size*size,nhid)
+        # self.fc1=torch.nn.Linear(ncha*size*size,nhid)
+        self.fc2=torch.nn.Linear(nhid,nhid)
+
+        self.last=torch.nn.ModuleList()
+        for t,n in taskcla:
+            self.last.append(torch.nn.Linear(nhid,n))
+
+class TransferLayer(torch.nn.Module):
+
+    def __init__(self,taskcla):
+
+        super(TransferLayer, self).__init__()
+
+        self.transfer=torch.nn.ModuleList()
+        for from_t,from_n in taskcla:
+            self.transfer_to_n=torch.nn.ModuleList()
+            for to_t,to_n in taskcla:
+                self.transfer_to_n.append(torch.nn.Linear(from_n,to_n))
+            self.transfer.append(self.transfer_to_n)
+
+#
+# class LastLayer(torch.nn.Module):
+#
+#     def __init__(self,nhid,taskcla):
+#
+#         super(LastLayer, self).__init__()
+#
+#         self.last=torch.nn.ModuleList()
+#         for t,n in taskcla:
+#             self.last.append(torch.nn.Linear(nhid,n))

@@ -70,6 +70,7 @@ print(state)
 memory = 4400
 # Use CUDA
 use_cuda = torch.cuda.is_available()
+device = torch.device('cuda:0' if use_cuda else 'cpu')
 
 seed = random.randint(1, 10000)
 random.seed(seed)
@@ -78,7 +79,7 @@ if use_cuda:
     torch.cuda.manual_seed_all(seed)
 
 
-
+    
 
 
 def load_mnist():
@@ -107,7 +108,7 @@ def load_svhn():
     y_train = np.reshape(y_train, (-1))
     y_test = np.reshape(y_test, (-1))
 
-
+    
     return (x_train, y_train), (x_test, y_test)
 
 
@@ -146,44 +147,45 @@ class CustomTensorDataset(Dataset):
 
     def __len__(self):
         return self.tensors[0].size(0)
-
-
-
-
+    
+    
+    
+    
 
 def main():
 
     if not os.path.isdir(args.checkpoint):
         mkdir_p(args.checkpoint)
-
+        
     if not os.path.isdir("models/mnist/"+args.checkpoint.split("/")[-1]):
         mkdir_p("models/mnist/"+args.checkpoint.split("/")[-1])
     args.savepoint = "models/mnist/"+args.checkpoint.split("/")[-1]
+    
+    
+    
 
 
-
-
-
-    model = RPS_net_mlp(args).cuda()
-#     model = RPS_net_cifar(args).cuda()    #for SVHN and CIFAR10
+    model = RPS_net_mlp(args).to(device)#.cuda() 
+#     model = RPS_net_cifar(args).cuda()    #for SVHN and CIFAR10 
     print('    Total params: %.2fM' % (sum(p.numel() for p in model.parameters())/1000000.0))
 
-    start_sess = int(sys.argv[2])
-    test_case = sys.argv[1]
+    start_sess = 0 #int(sys.argv[2])
+    test_case = 1#sys.argv[1]
     args.test_case = test_case
 
 
 #     (x_train, y_train), (x_test, y_test) = load_svhn()
 #     (x_train, y_train), (x_test, y_test) = load_cifar10()
     (x_train, y_train), (x_test, y_test) = load_mnist()
-
+    print (x_train.shape, y_train.shape)
+    return
 
     for ses in range(start_sess, start_sess+1):
-
+        
         if(ses==0):
-            path = get_path(args.L,args.M,args.N)*0
+            path = get_path(args.L,args.M,args.N)*0 
             path[:,0] = 1
-            fixed_path = get_path(args.L,args.M,args.N)*0
+            fixed_path = get_path(args.L,args.M,args.N)*0 
             train_path = path.copy()
             infer_path = path.copy()
         else:
@@ -191,7 +193,7 @@ def main():
             if(ses%args.jump==0):   #get a new path
                 fixed_path = np.load(args.checkpoint+"/fixed_path_"+str(ses-1)+"_"+str(load_test_case)+".npy")
                 path = get_path(args.L,args.M,args.N)
-                train_path = get_path(args.L,args.M,args.N)*0
+                train_path = get_path(args.L,args.M,args.N)*0 
             else:
                 if((ses//args.jump)*2==0):
                     fixed_path = get_path(args.L,args.M,args.N)*0
@@ -199,15 +201,15 @@ def main():
                     load_test_case_x = get_best_model((ses//args.jump)*args.jump-1, args.checkpoint)
                     fixed_path = np.load(args.checkpoint+"/fixed_path_"+str((ses//args.jump)*args.jump-1)+"_"+str(load_test_case_x)+".npy")
                 path = np.load(args.checkpoint+"/path_"+str(ses-1)+"_"+str(load_test_case)+".npy")
-                train_path = get_path(args.L,args.M,args.N)*0
-            infer_path = get_path(args.L,args.M,args.N)*0
+                train_path = get_path(args.L,args.M,args.N)*0 
+            infer_path = get_path(args.L,args.M,args.N)*0 
             for j in range(args.L):
                 for i in range(args.M):
                     if(fixed_path[j,i]==0 and path[j,i]==1):
                         train_path[j,i]=1
                     if(fixed_path[j,i]==1 or path[j,i]==1):
                         infer_path[j,i]=1
-
+            
         np.save(args.checkpoint+"/path_"+str(ses)+"_"+str(test_case)+".npy", path)
         if(ses==0):
             fixed_path_x = path.copy()
@@ -218,9 +220,9 @@ def main():
                     if(fixed_path_x[j,i]==0 and path[j,i]==1):
                         fixed_path_x[j,i]=1
         np.save(args.checkpoint+"/fixed_path_"+str(ses)+"_"+str(test_case)+".npy", fixed_path_x)
-
-
-
+        
+        
+        
         print('Starting with session {:d}'.format(ses))
         print('test case : ' + str(test_case))
         print('#################################################################################')
@@ -228,9 +230,9 @@ def main():
         print("fixed_path\n",fixed_path)
         print("train_path\n", train_path)
         print("infer_path\n", infer_path)
-
-
-
+        
+        
+        
         ids_train = []
         for j in range((ses*args.class_per_task), (ses+1)*args.class_per_task):
             ids_train.append(np.where(y_train==j)[0])
@@ -259,13 +261,13 @@ def main():
             ids_exp = []
             train_data = x_train[ids_train]
             train_label = y_train[ids_train]
-
+        
         test_data = x_test[ids_test]
         test_label = y_test[ids_test]
 
         import torch.utils.data as utils
         args.sess = ses
-
+        
         transform_train = transforms.Compose([
             transforms.ToPILImage(),
             transforms.Resize(32),
@@ -281,20 +283,20 @@ def main():
             transforms.ToTensor(),
         ])
 
-
+    
         train_dataset = utils.TensorDataset(torch.from_numpy(train_data).float(), torch.from_numpy(train_label).long()) # create your datset
         train_dataset2 = CustomTensorDataset((torch.tensor(train_data), torch.tensor(train_label).long()), transform=transform_train)
         train_loader = utils.DataLoader(train_dataset, batch_size=args.train_batch, shuffle=True) # create your data
-
+        
 
         test_dataset = utils.TensorDataset(torch.from_numpy(test_data).float(), torch.from_numpy(test_label).long()) # create your datset
         test_dataset2 = CustomTensorDataset((torch.tensor(test_data), torch.tensor(test_label).long()), transform=transform_test)
         test_loader = utils.DataLoader(test_dataset, batch_size=args.test_batch)
-
+        
 
         main_learner=Learner(model=model,args=args,trainloader=train_loader,
                              testloader=test_loader,old_model=copy.deepcopy(model),
-                             use_cuda=use_cuda, path=path,
+                             use_cuda=use_cuda, path=path, 
                              fixed_path=fixed_path, train_path=train_path, infer_path=infer_path)
         main_learner.learn()
 
