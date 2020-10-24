@@ -11,7 +11,7 @@ This repository contains the code for our NeurIPS 2020 Paper **"Continual Learni
 <p align="center">
     <br>
     <a href="https://github.com/ZixuanKe/CAT">
-        <img src="https://github.com/ZixuanKe/CAT/blob/master/CAT.png" width="900"/>
+        <img src="https://github.com/ZixuanKe/CAT/blob/main/CAT.png" width="800"/>
     </a>
     <br>
 <p>
