@@ -4,9 +4,10 @@
 
 
 
+
 # CAT (Continual learning with forgetting Avoidance and knowledge Transfer)
 
-This repository contains the code for our NeurIPS 2020 Paper **"Continual Learning of a Mixed Sequence of Similar and Dissimilar Tasks"** by Zixuan Ke, [Bing Liu](https://www.cs.uic.edu/~liub/) and Xingchang Huang.
+This repository contains the code for the NeurIPS 2020 Paper [Continual Learning of a Mixed Sequence of Similar and Dissimilar Tasks](https://proceedings.neurips.cc/paper/2020/file/d7488039246a405baf6a7cbc3613a56f-Paper.pdf) by Zixuan Ke, [Bing Liu](https://www.cs.uic.edu/~liub/) and Xingchang Huang.
 
 <p align="center">
     <br>
@@ -54,6 +55,16 @@ Existing research on continual learning of a sequence of tasks focused on dealin
 **Federated-CelebA**: Please download from [CelebA](http://mmlab.ie.cuhk.edu.hk/projects/CelebA.html) and follow the instruction  of [Leaf](https://github.com/TalwalkarLab/leaf).  Processed files are in **/dat** folder  
 **Federated-EMNIST**: Generated from [Leaf](https://github.com/TalwalkarLab/leaf).  Processed files are in **/dat** folder  
 
+## Reference
+If using this code, parts of it, or developments from it, please cite the reference bellow.
+
+    @article{ke2020continualmixed,
+    author= {Ke, Zixuan and Liu, Bing and Huang, Xingchang},
+    title= {Continual Learning of a Mixed Sequence of Similar and Dissimilar Tasks},
+    booktitle = {Advances in Neural Information Processing Systems},
+    volume={33},
+    year = {2020}}
+    
 ## Contact
 
 Please drop an email to [Zixuan Ke](zke4@uic.edu) if you have any questions. 
