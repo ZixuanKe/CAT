@@ -31,6 +31,8 @@ class Net(torch.nn.Module):
         for t,n in self.taskcla:
             self.last.append(torch.nn.Linear(2048,n))
 
+        print('CNN LFL')
+
         return
 
     def forward(self,x):

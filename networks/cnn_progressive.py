@@ -46,8 +46,8 @@ class Net(torch.nn.Module):
         self.maxpool=torch.nn.MaxPool2d(2)
         self.relu=torch.nn.ReLU()
 
-        self.drop1=torch.nn.Dropout(0.2)
-        self.drop2=torch.nn.Dropout(0.5)
+        self.drop1=torch.nn.Dropout(args.pdrop1)
+        self.drop2=torch.nn.Dropout(args.pdrop2)
 
         #declare task columns subnets
         for t,n in self.taskcla:
@@ -87,6 +87,9 @@ class Net(torch.nn.Module):
                 self.Vfl.append(torch.nn.Linear(t*self.sizefc2,self.sizefc2))
                 self.Ufl.append(torch.nn.Linear(self.sizefc2,n))
 
+
+
+        print('CNN Progressive')
         return
 
     def forward(self,x,t):

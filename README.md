@@ -32,18 +32,18 @@ Existing research on continual learning of a sequence of tasks focused on dealin
 ### Format
     run_train_[dataset]_[network]_[approach_specification]_[#similar]_[#dissimilar]_[approach].sh
     [dataset]: mixemnist/mixceleba
-    [network]: mlp/alexnet
-    [approch_specification]: optional, e.g. hat, remove_att, ewc...
+    [network]: mlp/cnn
+    [approch_specification]: optional, e.g. cat, hat, ewc, remove_att...
     [#similar]: number of similar tasks, which is always 10
     [#dissimilar]: number of dissimilar tasks, which can be either 10 or 20
     [approah]: ncl/one/mtl/
-    [more options please refere to .sh files, run/run_mtcl.py and config.py. Note that MTCL referes to CAT, they are the same]
+    [more options please refere to .sh files, run/run_cat.py and config.py.]
  
  ### Examples:
  
     run_train_mixemnist_mlp_10_10_ncl.sh #Run M(EMNIST-10, F-EMNIST) with NCL 
     run_train_mixemnist_mlp_hat_10_10_ncl.sh #Run M(EMNIST-10, F-EMNIST) with HAT  
-    run_train_mixemnist_mlp_mtcl_10_10_ncl.sh #Run M(EMNIST-10, F-EMNIST) with CAT  
+    run_train_mixemnist_mlp_cat_10_10_ncl.sh #Run M(EMNIST-10, F-EMNIST) with CAT  
     run_train_mixemnist_mlp_remove_att_10_10_ncl.sh #Run M(EMNIST-10, F-EMNIST) with CAT without attention  
     run_train_mixemnist_mlp_10_20_ncl.sh #Run M(EMNIST-20, F-EMNIST) with NCL          
     run_train_mixceleba_mlp_10_10_ncl.sh.sh #Run M(CIFAR100-10, F-CelebA) with NCL          
@@ -67,7 +67,7 @@ If using this code, parts of it, or developments from it, please cite the refere
     
 ## Contact
 
-Please drop an email to [Zixuan Ke](zke4@uic.edu) if you have any questions. 
+Please drop an email to [Zixuan Ke](zke4@uic.edu) or [Xingchang Huang](huangxch3@gmail.com) if you have any questions. 
 
 
 ## Acknowledgments

@@ -5,7 +5,7 @@ import utils
 
 class Net(torch.nn.Module):
 
-    def __init__(self,inputsize,taskcla,nhid=2000,pdrop1=0.2,pdrop2=0.5,args=0):
+    def __init__(self,inputsize,taskcla,nhid=2000,args=0):
         super(Net,self).__init__()
 
         ncha,size,_=inputsize
@@ -18,10 +18,8 @@ class Net(torch.nn.Module):
         self.maxpool=torch.nn.MaxPool2d(2)
         self.relu=torch.nn.ReLU()
 
-        if args.pdrop1 >= 0:
-            pdrop1 = args.pdrop1
-        if args.pdrop2 >= 0:
-            pdrop2 = args.pdrop2
+        pdrop1 = args.pdrop1
+        pdrop2 = args.pdrop2
 
 
         self.drop1=torch.nn.Dropout(pdrop1)
@@ -32,7 +30,7 @@ class Net(torch.nn.Module):
         for t,n in self.taskcla:
             self.last.append(torch.nn.Linear(nhid,n))
 
-        print('AlexNet')
+        print('CNN')
 
         return
 

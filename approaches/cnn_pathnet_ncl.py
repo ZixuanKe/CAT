@@ -39,6 +39,7 @@ class Appr(object):
         self.criterion=torch.nn.CrossEntropyLoss()
         self.optimizer=self._get_optimizer()
 
+        print('CNN Pathnet NCL')
         return
 
     def _get_optimizer(self,lr=None):

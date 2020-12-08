@@ -38,7 +38,7 @@ elif args.experiment=='mixceleba':
 # Args -- Approach
 if 'random_ncl' in args.approach:
     from approaches import random_ncl as approach
-elif args.approach=='mlp_ncl' or args.approach=='alexnet_ncl':
+elif args.approach=='mlp_ncl' or args.approach=='cnn_ncl':
     from approaches import ncl as approach
 elif 'one' in args.approach:
     from approaches import one as approach
@@ -58,8 +58,8 @@ elif 'progressive_ncl' in args.approach:
     from approaches import progressive_ncl as approach
 elif args.approach=='mlp_pathnet_ncl':
     from approaches import mlp_pathnet_ncl as approach
-elif args.approach=='alexnet_pathnet_ncl':
-    from approaches import alexnet_pathnet_ncl as approach
+elif args.approach=='cnn_pathnet_ncl':
+    from approaches import cnn_pathnet_ncl as approach
 elif 'hat_ncl' in args.approach:
     from approaches import hat_ncl as approach
 elif 'mtl' in args.approach:
@@ -72,17 +72,17 @@ elif 'mlp_progressive' in args.approach:
     from networks import mlp_progressive as network
 elif 'mlp_pathnet' in args.approach:
     from networks import mlp_pathnet as network
-elif 'alexnet_lfl' in args.approach:
-    from networks import alexnet_lfl as network
-elif 'alexnet_hat' in args.approach:
-    from networks import alexnet_hat as network
-elif 'alexnet_progressive' in args.approach:
-    from networks import alexnet_progressive as network
-elif 'alexnet_pathnet' in args.approach:
-    from networks import alexnet_pathnet as network
+elif 'cnn_lfl' in args.approach:
+    from networks import cnn_lfl as network
+elif 'cnn_hat' in args.approach:
+    from networks import cnn_hat as network
+elif 'cnn_progressive' in args.approach:
+    from networks import cnn_progressive as network
+elif 'cnn_pathnet' in args.approach:
+    from networks import cnn_pathnet as network
 
-elif 'alexnet' in args.approach:
-    from networks import alexnet as network
+elif 'cnn' in args.approach:
+    from networks import cnn as network
 elif 'mlp' in args.approach:
     from networks import mlp as network
 ########################################################################################################################

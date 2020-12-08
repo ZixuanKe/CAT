@@ -50,13 +50,10 @@ class Appr(object):
             # raise NotImplementedError
         if lr is None: lr=self.lr
 
-        elif phase=='mcl' and ('pipeline' in args.loss_type or 'no_attention' in args.loss_type):
+        elif phase=='mcl' and 'no_attention' in args.loss_type:
             return torch.optim.SGD(list(self.model.mcl.parameters()),lr=lr)
 
         elif phase=='mcl' and 'joint' in args.loss_type:
-            return torch.optim.SGD(list(self.model.kt.parameters())+list(self.model.mcl.parameters()),lr=lr)
-
-        if phase=='kt':
             return torch.optim.SGD(list(self.model.kt.parameters())+list(self.model.mcl.parameters()),lr=lr)
 
         elif  phase=='transfer':
@@ -78,11 +75,7 @@ class Appr(object):
         best_model=utils.get_model(self.model)
 
 
-        if phase=='kt':
-            lr=self.lr_kt
-            patience=self.lr_patience_kt
-            nepochs=self.nepochs_kt
-        elif phase=='mcl' or phase=='transfer' or phase=='reference':
+        if phase=='mcl' or phase=='transfer' or phase=='reference':
             lr=self.lr
             patience=self.lr_patience
             nepochs=self.nepochs
@@ -267,85 +260,86 @@ class Appr(object):
         total_num=0
         self.model.eval()
 
-        r=np.arange(x.size(0))
-        r=torch.LongTensor(r).cuda()
+        with torch.no_grad():
+            r=np.arange(x.size(0))
+            r=torch.LongTensor(r).cuda()
 
-        # Loop batches
-        for i in range(0,len(r),self.sbatch):
-            if i+self.sbatch<=len(r): b=r[i:i+self.sbatch]
-            else: b=r[i:]
-            images=torch.autograd.Variable(x[b],volatile=True)
-            targets=torch.autograd.Variable(y[b],volatile=True)
-            task=torch.autograd.Variable(torch.LongTensor([t]).cuda(),volatile=True)
+            # Loop batches
+            for i in range(0,len(r),self.sbatch):
+                if i+self.sbatch<=len(r): b=r[i:i+self.sbatch]
+                else: b=r[i:]
+                images=torch.autograd.Variable(x[b],volatile=True)
+                targets=torch.autograd.Variable(y[b],volatile=True)
+                task=torch.autograd.Variable(torch.LongTensor([t]).cuda(),volatile=True)
 
-            # Forward
+                # Forward
 
-            if phase == 'mcl':
-                outputs,masks,outputs_attn=self.model.forward(task,images,s=self.smax,phase=phase,
-                                                             similarity=similarity,
-                                                             history_mask_pre=history_mask_pre,
-                                                             check_federated=check_federated)
-                output=outputs[t]
+                if phase == 'mcl':
+                    outputs,masks,outputs_attn=self.model.forward(task,images,s=self.smax,phase=phase,
+                                                                 similarity=similarity,
+                                                                 history_mask_pre=history_mask_pre,
+                                                                 check_federated=check_federated)
+                    output=outputs[t]
 
-                if outputs_attn is None:
-                    loss=self.criterion(output,targets,masks)
+                    if outputs_attn is None:
+                        loss=self.criterion(output,targets,masks)
+                    else:
+                        output_attn=outputs_attn[t]
+                        loss=self.joint_criterion(output,targets,masks,output_attn)
+
+                elif phase == 'transfer' or phase == 'reference':
+                    outputs=self.model.forward(task,images,s=self.smax,phase=phase,
+                                                     pre_mask=pre_mask, pre_task=pre_task)
+                    output=outputs[t]
+                    loss=self.transfer_criterion(output,targets)
+
+
+                # if phase=='mcl' and (similarity is not None and t<len(similarity) and np.count_nonzero(similarity[:t])>1 and similarity[t]==1):
+
+                if phase=='mcl' and 'no_attention' not in self.args.loss_type and outputs_attn is not None:
+                    _,att_pred=output_attn.max(1)
+                    _,mask_pred=output.max(1)
+
+                    mask_hits=(mask_pred==targets).float()
+                    att_hits=(att_pred==targets).float()
+
+                    # Log
+                    total_mask_loss+=loss.data.cpu().numpy().item()*len(b)
+                    total_mask_acc+=mask_hits.sum().data.cpu().numpy().item()
+
+                    # Log
+                    total_att_loss+=loss.data.cpu().numpy().item()*len(b)
+                    total_att_acc+=att_hits.sum().data.cpu().numpy().item()
+
+
                 else:
-                    output_attn=outputs_attn[t]
-                    loss=self.joint_criterion(output,targets,masks,output_attn)
+                    _,pred=output.max(1)
+                    hits=(pred==targets).float()
 
-            elif phase == 'transfer' or phase == 'reference':
-                outputs=self.model.forward(task,images,s=self.smax,phase=phase,
-                                                 pre_mask=pre_mask, pre_task=pre_task)
-                output=outputs[t]
-                loss=self.transfer_criterion(output,targets)
+                    # Log
+                    total_mask_loss+=loss.data.cpu().numpy().item()*len(b)
+                    total_mask_acc+=hits.sum().data.cpu().numpy().item()
 
 
-            # if phase=='mcl' and (similarity is not None and t<len(similarity) and np.count_nonzero(similarity[:t])>1 and similarity[t]==1):
+                total_num+=len(b)
 
-            if phase=='mcl' and 'no_attention' not in self.args.loss_type and outputs_attn is not None:
-                _,att_pred=output_attn.max(1)
-                _,mask_pred=output.max(1)
+            if 'all-one' in self.args.similarity_detection:
+                    total_loss = total_att_loss
+                    total_acc = total_att_acc
 
-                mask_hits=(mask_pred==targets).float()
-                att_hits=(att_pred==targets).float()
-
-                # Log
-                total_mask_loss+=loss.data.cpu().numpy().item()*len(b)
-                total_mask_acc+=mask_hits.sum().data.cpu().numpy().item()
-
-                # Log
-                total_att_loss+=loss.data.cpu().numpy().item()*len(b)
-                total_att_acc+=att_hits.sum().data.cpu().numpy().item()
-
+            elif phase=='mcl' and 'no_attention' not in self.args.loss_type:
+                if total_att_acc > total_mask_acc:
+                    total_loss = total_att_loss
+                    total_acc = total_att_acc
+                else:
+                    total_loss = total_mask_loss
+                    total_acc = total_mask_acc
 
             else:
-                _,pred=output.max(1)
-                hits=(pred==targets).float()
+                    total_loss = total_mask_loss
+                    total_acc = total_mask_acc
 
-                # Log
-                total_mask_loss+=loss.data.cpu().numpy().item()*len(b)
-                total_mask_acc+=hits.sum().data.cpu().numpy().item()
-
-
-            total_num+=len(b)
-
-        if 'all-one' in self.args.similarity_detection:
-                total_loss = total_att_loss
-                total_acc = total_att_acc
-
-        elif phase=='mcl' and 'no_attention' not in self.args.loss_type:
-            if total_att_acc > total_mask_acc:
-                total_loss = total_att_loss
-                total_acc = total_att_acc
-            else:
-                total_loss = total_mask_loss
-                total_acc = total_mask_acc
-
-        else:
-                total_loss = total_mask_loss
-                total_acc = total_mask_acc
-
-        return total_loss/total_num,total_acc/total_num
+            return total_loss/total_num,total_acc/total_num
 
 
     def test(self,t,x,y,phase=None,
@@ -362,142 +356,145 @@ class Appr(object):
         total_num=0
 
         self.model.eval()
+        with torch.no_grad():
 
-        r=np.arange(xvalid.size(0))
-        r=torch.LongTensor(r).cuda()
+            r=np.arange(xvalid.size(0))
+            r=torch.LongTensor(r).cuda()
 
-        # Loop batches
-        for i in range(0,len(r),self.sbatch):
-            if i+self.sbatch<=len(r): b=r[i:i+self.sbatch]
-            else: b=r[i:]
-            images=torch.autograd.Variable(xvalid[b],volatile=True)
-            targets=torch.autograd.Variable(yvalid[b],volatile=True)
-            task=torch.autograd.Variable(torch.LongTensor([t]).cuda(),volatile=True)
+            # Loop validation batches
+            for i in range(0,len(r),self.sbatch):
+                if i+self.sbatch<=len(r): b=r[i:i+self.sbatch]
+                else: b=r[i:]
+                images=torch.autograd.Variable(xvalid[b],volatile=True)
+                targets=torch.autograd.Variable(yvalid[b],volatile=True)
+                task=torch.autograd.Variable(torch.LongTensor([t]).cuda(),volatile=True)
 
-            # Forward
+                # Forward
 
-            if phase == 'mcl':
-                outputs,masks,outputs_attn=self.model.forward(task,images,s=self.smax,phase=phase,
-                                                             similarity=similarity,
-                                                             history_mask_pre=history_mask_pre,
-                                                             check_federated=check_federated)
-                output=outputs[t]
+                if phase == 'mcl':
+                    outputs,masks,outputs_attn=self.model.forward(task,images,s=self.smax,phase=phase,
+                                                                 similarity=similarity,
+                                                                 history_mask_pre=history_mask_pre,
+                                                                 check_federated=check_federated)
+                    output=outputs[t]
 
-                if outputs_attn is None:
-                    loss=self.criterion(output,targets,masks)
+                    if outputs_attn is None:
+                        loss=self.criterion(output,targets,masks)
+                    else:
+                        output_attn=outputs_attn[t]
+                        loss=self.joint_criterion(output,targets,masks,output_attn)
+
+                elif phase == 'transfer' or phase == 'reference':
+                    outputs=self.model.forward(task,images,s=self.smax,phase=phase,
+                                                     pre_mask=pre_mask, pre_task=pre_task)
+                    output=outputs[t]
+                    loss=self.transfer_criterion(output,targets)
+
+
+                # if phase=='mcl' and (similarity is not None and t<len(similarity) and np.count_nonzero(similarity[:t])>1 and similarity[t]==1):
+
+                if phase=='mcl' and 'no_attention' not in self.args.loss_type and outputs_attn is not None:
+                    _,att_pred=output_attn.max(1)
+                    _,mask_pred=output.max(1)
+
+                    mask_hits=(mask_pred==targets).float()
+                    att_hits=(att_pred==targets).float()
+
+                    # Log
+                    total_mask_loss+=loss.data.cpu().numpy().item()*len(b)
+                    total_mask_acc+=mask_hits.sum().data.cpu().numpy().item()
+
+                    # Log
+                    total_att_loss+=loss.data.cpu().numpy().item()*len(b)
+                    total_att_acc+=att_hits.sum().data.cpu().numpy().item()
+
+
                 else:
-                    output_attn=outputs_attn[t]
-                    loss=self.joint_criterion(output,targets,masks,output_attn)
+                    _,pred=output.max(1)
+                    hits=(pred==targets).float()
 
-            elif phase == 'transfer' or phase == 'reference':
-                outputs=self.model.forward(task,images,s=self.smax,phase=phase,
-                                                 pre_mask=pre_mask, pre_task=pre_task)
-                output=outputs[t]
-                loss=self.transfer_criterion(output,targets)
+                    # Log
+                    total_mask_loss+=loss.data.cpu().numpy().item()*len(b)
+                    total_mask_acc+=hits.sum().data.cpu().numpy().item()
 
 
-            # if phase=='mcl' and (similarity is not None and t<len(similarity) and np.count_nonzero(similarity[:t])>1 and similarity[t]==1):
+                total_num+=len(b)
 
-            if phase=='mcl' and 'no_attention' not in self.args.loss_type and outputs_attn is not None:
-                _,att_pred=output_attn.max(1)
-                _,mask_pred=output.max(1)
-
-                mask_hits=(mask_pred==targets).float()
-                att_hits=(att_pred==targets).float()
-
-                # Log
-                total_mask_loss+=loss.data.cpu().numpy().item()*len(b)
-                total_mask_acc+=mask_hits.sum().data.cpu().numpy().item()
-
-                # Log
-                total_att_loss+=loss.data.cpu().numpy().item()*len(b)
-                total_att_acc+=att_hits.sum().data.cpu().numpy().item()
-
-
-            else:
-                _,pred=output.max(1)
-                hits=(pred==targets).float()
-
-                # Log
-                total_mask_loss+=loss.data.cpu().numpy().item()*len(b)
-                total_mask_acc+=hits.sum().data.cpu().numpy().item()
-
-
-            total_num+=len(b)
-
-        if 'all-one' in self.args.similarity_detection:
-            choose_att = True
-        elif phase=='mcl' and 'no_attention' not in self.args.loss_type:
-            if total_att_acc > total_mask_acc:
+            if 'all-one' in self.args.similarity_detection:
                 choose_att = True
+            elif phase=='mcl' and 'no_attention' not in self.args.loss_type:
+                if total_att_acc > total_mask_acc:
+                    choose_att = True
 
-        print('choose_att: ',choose_att)
+            print('choose_att: ',choose_att)
+            #Here simply use validation to choose attention in testing.
+            # One can also remember which tasks have used the attention in training and then apply attention for testing
 
-        r=np.arange(x.size(0))
-        r=torch.LongTensor(r).cuda()
+            r=np.arange(x.size(0))
+            r=torch.LongTensor(r).cuda()
 
-        # Loop batches
-        for i in range(0,len(r),self.sbatch):
-            if i+self.sbatch<=len(r): b=r[i:i+self.sbatch]
-            else: b=r[i:]
-            images=torch.autograd.Variable(x[b],volatile=True)
-            targets=torch.autograd.Variable(y[b],volatile=True)
-            task=torch.autograd.Variable(torch.LongTensor([t]).cuda(),volatile=True)
+            # Loop batches
+            for i in range(0,len(r),self.sbatch):
+                if i+self.sbatch<=len(r): b=r[i:i+self.sbatch]
+                else: b=r[i:]
+                images=torch.autograd.Variable(x[b],volatile=True)
+                targets=torch.autograd.Variable(y[b],volatile=True)
+                task=torch.autograd.Variable(torch.LongTensor([t]).cuda(),volatile=True)
 
-            # Forward
+                # Forward
 
-            if phase == 'mcl':
-                outputs,masks,outputs_attn=self.model.forward(task,images,s=self.smax,phase=phase,
-                                                             similarity=similarity,
-                                                             history_mask_pre=history_mask_pre,
-                                                             check_federated=check_federated)
-                output=outputs[t]
+                if phase == 'mcl':
+                    outputs,masks,outputs_attn=self.model.forward(task,images,s=self.smax,phase=phase,
+                                                                 similarity=similarity,
+                                                                 history_mask_pre=history_mask_pre,
+                                                                 check_federated=check_federated)
+                    output=outputs[t]
 
-                if outputs_attn is None:
-                    loss=self.criterion(output,targets,masks)
+                    if outputs_attn is None:
+                        loss=self.criterion(output,targets,masks)
+                    else:
+                        output_attn=outputs_attn[t]
+                        loss=self.joint_criterion(output,targets,masks,output_attn)
+
+                elif phase == 'transfer' or phase == 'reference':
+                    outputs=self.model.forward(task,images,s=self.smax,phase=phase,
+                                                     pre_mask=pre_mask, pre_task=pre_task)
+                    output=outputs[t]
+                    loss=self.transfer_criterion(output,targets)
+
+                if phase=='mcl' and 'no_attention' not in self.args.loss_type and outputs_attn is not None:
+                    _,att_pred=output_attn.max(1)
+                    _,mask_pred=output.max(1)
+
+                    mask_hits=(mask_pred==targets).float()
+                    att_hits=(att_pred==targets).float()
+
+                    # Log
+                    total_mask_loss+=loss.data.cpu().numpy().item()*len(b)
+                    total_mask_acc+=mask_hits.sum().data.cpu().numpy().item()
+
+                    # Log
+                    total_att_loss+=loss.data.cpu().numpy().item()*len(b)
+                    total_att_acc+=att_hits.sum().data.cpu().numpy().item()
+
                 else:
-                    output_attn=outputs_attn[t]
-                    loss=self.joint_criterion(output,targets,masks,output_attn)
+                    _,pred=output.max(1)
+                    hits=(pred==targets).float()
 
-            elif phase == 'transfer' or phase == 'reference':
-                outputs=self.model.forward(task,images,s=self.smax,phase=phase,
-                                                 pre_mask=pre_mask, pre_task=pre_task)
-                output=outputs[t]
-                loss=self.transfer_criterion(output,targets)
+                    # Log
+                    total_mask_loss+=loss.data.cpu().numpy().item()*len(b)
+                    total_mask_acc+=hits.sum().data.cpu().numpy().item()
 
-            if phase=='mcl' and 'no_attention' not in self.args.loss_type and outputs_attn is not None:
-                _,att_pred=output_attn.max(1)
-                _,mask_pred=output.max(1)
+                total_num+=len(b)
 
-                mask_hits=(mask_pred==targets).float()
-                att_hits=(att_pred==targets).float()
-
-                # Log
-                total_mask_loss+=loss.data.cpu().numpy().item()*len(b)
-                total_mask_acc+=mask_hits.sum().data.cpu().numpy().item()
-
-                # Log
-                total_att_loss+=loss.data.cpu().numpy().item()*len(b)
-                total_att_acc+=att_hits.sum().data.cpu().numpy().item()
-
+            if choose_att == True:
+                total_loss = total_att_loss
+                total_acc = total_att_acc
             else:
-                _,pred=output.max(1)
-                hits=(pred==targets).float()
+                total_loss = total_mask_loss
+                total_acc = total_mask_acc
 
-                # Log
-                total_mask_loss+=loss.data.cpu().numpy().item()*len(b)
-                total_mask_acc+=hits.sum().data.cpu().numpy().item()
-
-            total_num+=len(b)
-
-        if choose_att == True:
-            total_loss = total_att_loss
-            total_acc = total_att_acc
-        else:
-            total_loss = total_mask_loss
-            total_acc = total_mask_acc
-
-        return total_loss/total_num,total_acc/total_num
+            return total_loss/total_num,total_acc/total_num
 
 
 

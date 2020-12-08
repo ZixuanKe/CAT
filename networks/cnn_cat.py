@@ -11,19 +11,16 @@ import torch
 
 class Net(torch.nn.Module):
 
-    def __init__(self,inputsize,taskcla,nlayers=2,nhid=2000,pdrop1=0.2,pdrop2=0.5,args=None):
+    def __init__(self,inputsize,taskcla,nlayers=2,nhid=2000,args=None):
         super(Net,self).__init__()
 
         ncha,size,size_height=inputsize
         self.taskcla=taskcla
 
-        self.nlayers=nlayers
         self.relu=torch.nn.ReLU()
 
-        if args.pdrop1 >= 0:
-            pdrop1 = args.pdrop1
-        if args.pdrop2 >= 0:
-            pdrop2 = args.pdrop2
+        pdrop1 = args.pdrop1
+        pdrop2 = args.pdrop2
 
         self.drop1=torch.nn.Dropout(pdrop1)
         self.drop2=torch.nn.Dropout(pdrop2)
@@ -35,9 +32,11 @@ class Net(torch.nn.Module):
         self.kt = KnowledgeTransfer(nhid,ncha,size,self.taskcla,args)
         self.smax = args.smax
         self.args = args
+        self.maxpool=torch.nn.MaxPool2d(2)
 
-        print('MLP MTCL')
-
+        print('CNN CAT')
+        print('pdrop1: ',pdrop1)
+        print('pdrop2: ',pdrop2)
 
         """ (e.g., used with compression experiments)
         lo,hi=0,2
@@ -54,64 +53,38 @@ class Net(torch.nn.Module):
                 pre_mask=None, pre_task=None,
                 similarity=None,history_mask_pre=None,check_federated=None):
 
-
-        if 'mcl' in phase and 'no_attention' in self.args.loss_type:
+        if 'mcl' in phase and 'multi-loss-joint-Tsim' in self.args.note:
             max_masks=self.mask(t,s=s)
-            gfc1,gfc2=max_masks
+            gc1,gfc1,gfc2=max_masks
 
             # Gated
-            h=self.drop1(x.view(x.size(0),-1))
-
+            h=self.maxpool(self.drop1(self.relu(self.mcl.c1(x))))
+            h=h*gc1.view(1,-1,1,1).expand_as(h)
+            h=h.view(x.size(0),-1)
             h=self.drop2(self.relu(self.mcl.fc1(h)))
             h=h*gfc1.expand_as(h)
-
-            h=self.drop2(self.relu(self.mcl.fc2(h)))
-            h=h*gfc2.expand_as(h)
-
-            y=[]
-            for t,i in self.taskcla:
-                y.append(self.mcl.mask_last[t](h))
-            return y,max_masks,None
-
-
-        elif 'mcl' in phase and 'multi-loss-joint-Tsim' in self.args.loss_type:
-            #TODO: We need a better joint model. I tried naive multi-loss, got very little improvement
-            max_masks=self.mask(t,s=s)
-            gfc1,gfc2=max_masks
-
-            # Gated
-            h=self.drop1(x.view(x.size(0),-1))
-
-            h=self.drop2(self.relu(self.mcl.fc1(h)))
-            h=h*gfc1.expand_as(h)
-
             h=self.drop2(self.relu(self.mcl.fc2(h)))
             h=h*gfc2.expand_as(h)
 
             pre_models = []
 
-            if self.training == True:
-                cand_t = t
-            else:
-                # cand_t = check_federated.fix_length() #non-simranking
-                cand_t = t #sim-ranking
 
             pre_ts= []
-            for pre_t in range(cand_t):
+            for pre_t in range(t):
                 if self.training ==True and similarity[pre_t] :
                     continue
                 elif self.training ==False and check_federated.check_t(pre_t)==False:
                     continue
 
-                pre_gfc1,pre_gfc2=self.mask(torch.autograd.Variable(torch.LongTensor([pre_t]).cuda(),volatile=False),s=self.smax)
+                pre_gc1,pre_gfc1,pre_gfc2=self.mask(torch.autograd.Variable(torch.LongTensor([pre_t]).cuda(),volatile=False),s=self.smax)
                 pre_gfc1 = pre_gfc1.data.clone()
                 pre_gfc2 = pre_gfc2.data.clone()
 
-                pre_h=self.drop1(x.view(x.size(0),-1))
-
-                pre_h=self.drop2(self.relu(self.mcl.fc1(pre_h))) #fc1 is changing
+                pre_h=self.maxpool(self.drop1(self.relu(self.mcl.c1(x))))
+                pre_h=pre_h*pre_gc1.view(1,-1,1,1).expand_as(pre_h)
+                pre_h=pre_h.view(x.size(0),-1)
+                pre_h=self.drop2(self.relu(self.mcl.fc1(pre_h)))
                 pre_h=pre_h*pre_gfc1.expand_as(pre_h)
-
                 pre_h=self.drop2(self.relu(self.mcl.fc2(pre_h)))
                 pre_h=pre_h*pre_gfc2.expand_as(pre_h)
 
@@ -137,24 +110,22 @@ class Net(torch.nn.Module):
                 return y,max_masks,y_attn
 
             else:
-                if 'no-isolate' in self.args.loss_type:
 
-                    y=[]
-                    for t,i in self.taskcla:
-                        y.append(self.mcl.mask_last[t](h))
-
-                    return y,max_masks,None
+                if 'no-isolate' in self.args.note:
+                    raise NotImplementedError
 
                 else:
-                    # only care about myself, even in forward pass
-                    gfc1,gfc2=self.Tsim_mask(t,history_mask_pre=history_mask_pre,similarity=similarity)
 
-                    h_attn=self.drop1(x.view(x.size(0),-1))
+                    gc1,gfc1,gfc2=self.Tsim_mask(t,history_mask_pre=history_mask_pre,similarity=similarity)
+
+                    h_attn=self.maxpool(self.drop1(self.relu(self.mcl.c1(x))))
+                    h_attn=h_attn*gc1.view(1,-1,1,1).expand_as(h_attn)
+                    h_attn=h_attn.view(x.size(0),-1)
                     h_attn=self.drop2(self.relu(self.mcl.fc1(h_attn)))
                     h_attn=h_attn*gfc1.expand_as(h_attn)
-
                     h_attn=self.drop2(self.relu(self.mcl.fc2(h_attn)))
                     h_attn=h_attn*gfc2.expand_as(h_attn)
+
 
                     y_attn=[]
                     y=[]
@@ -167,47 +138,21 @@ class Net(torch.nn.Module):
 
 
         elif phase == 'transfer':
-            gfc1,gfc2=pre_mask
+            raise NotImplementedError
 
-            # source domain data
-            h=self.drop1(x.view(x.size(0),-1))
-            h=self.drop2(self.relu(self.mcl.fc1(h)))
-            h=h*gfc1.expand_as(h)
-            h=self.drop2(self.relu(self.mcl.fc2(h)))
-            h=h*gfc2.expand_as(h)
-
-
-            y=[]
-            for t,i in self.taskcla:
-                y.append(self.transfer.transfer[pre_task][t](self.mcl.mask_last[pre_task](h)))
-            return y
 
         elif phase == 'reference':
-            gfc1,gfc2=pre_mask
-
-            #no source domain
-            h=self.drop1(x.view(x.size(0),-1))
-            h=self.drop2(self.relu(self.transfer.fc1(h)))
-            h=h*gfc1.expand_as(h)
-            h=self.drop2(self.relu(self.transfer.fc2(h)))
-            h=h*gfc2.expand_as(h)
-
-            y=[]
-            for t,i in self.taskcla:
-                y.append(self.transfer.transfer[pre_task][t](self.transfer.last[pre_task](h)))
-            return y
+            raise NotImplementedError
 
 
     def mask(self,t,s=1,phase=None):
         #used by training
 
-        if phase is not None and 'kt' in phase:
-            gfc1=self.gate(s*self.kt.efc1(t))
-            gfc2=self.gate(s*self.kt.efc2(t))
-        else:
-            gfc1=self.gate(s*self.mcl.efc1(t))
-            gfc2=self.gate(s*self.mcl.efc2(t))
-        return [gfc1,gfc2]
+        gc1=self.gate(s*self.mcl.ec1(t))
+        gfc1=self.gate(s*self.mcl.efc1(t))
+        gfc2=self.gate(s*self.mcl.efc2(t))
+
+        return [gc1,gfc1,gfc2]
 
     def Tsim_mask(self,t, history_mask_pre=None,similarity=None,phase=None):
         #find the distinct mask, used by block the backward pass
@@ -215,33 +160,35 @@ class Net(torch.nn.Module):
         #want aggregate Tsim
         if phase is None:
            #Tsim mask
+            Tsim_gc1=torch.ones_like(self.gate(0*self.mcl.ec1(t)))
             Tsim_gfc1=torch.ones_like(self.gate(0*self.mcl.efc1(t)))
             Tsim_gfc2=torch.ones_like(self.gate(0*self.mcl.efc2(t)))
 
-        elif 'kt'==phase:
-            # simply used for block the Tdis and Tfree
-            Tsim_gfc1=torch.ones_like(self.gate(0*self.kt.efc1(t)))
-            Tsim_gfc2=torch.ones_like(self.gate(0*self.kt.efc2(t)))
 
         for history_t in range(t):
             if history_t == 0:
-                Tsim_gfc1_index = history_mask_pre[history_t][0].round().nonzero()
-                Tsim_gfc2_index = history_mask_pre[history_t][1].round().nonzero()
+                Tsim_gc1_index = history_mask_pre[history_t][0].round().nonzero()
+                Tsim_gfc1_index = history_mask_pre[history_t][1].round().nonzero()
+                Tsim_gfc2_index = history_mask_pre[history_t][2].round().nonzero()
             else:
-                Tsim_gfc1_index = (history_mask_pre[history_t][0] - history_mask_pre[history_t-1][0]).round().nonzero()
-                Tsim_gfc2_index = (history_mask_pre[history_t][1] - history_mask_pre[history_t-1][1]).round().nonzero()
+                Tsim_gc1_index = (history_mask_pre[history_t][0] - history_mask_pre[history_t-1][0]).round().nonzero()
+                Tsim_gfc1_index = (history_mask_pre[history_t][1] - history_mask_pre[history_t-1][1]).round().nonzero()
+                Tsim_gfc2_index = (history_mask_pre[history_t][2] - history_mask_pre[history_t-1][2]).round().nonzero()
             if similarity[history_t]==0:
+                Tsim_gc1[Tsim_gc1_index[:,0],Tsim_gc1_index[:,1]] = 0
                 Tsim_gfc1[Tsim_gfc1_index[:,0],Tsim_gfc1_index[:,1]] = 0
                 Tsim_gfc2[Tsim_gfc2_index[:,0],Tsim_gfc2_index[:,1]] = 0
 
-        return [Tsim_gfc1,Tsim_gfc2]
+        return [Tsim_gc1,Tsim_gfc1,Tsim_gfc2]
 
 
     def get_view_for(self,n,masks):
-        gfc1,gfc2=masks
+        gc1,gfc1,gfc2=masks
 
         if n=='mcl.fc1.weight':
-            return gfc1.data.view(-1,1).expand_as(self.mcl.fc1.weight)
+            post=gfc1.data.view(-1,1).expand_as(self.mcl.fc1.weight)
+            pre=gc1.data.view(-1,1,1).expand((self.mcl.ec1.weight.size(1),self.mcl.smid,self.mcl.smid)).contiguous().view(1,-1).expand_as(self.mcl.fc1.weight)
+            return torch.min(post,pre)
         elif n=='mcl.fc1.bias':
             return gfc1.data.view(-1)
         elif n=='mcl.fc2.weight':
@@ -250,26 +197,12 @@ class Net(torch.nn.Module):
             return torch.min(post,pre)
         elif n=='mcl.fc2.bias':
             return gfc2.data.view(-1)
+        elif n=='mcl.c1.weight':
+            return gc1.data.view(-1,1,1,1).expand_as(self.mcl.c1.weight)
+        elif n=='mcl.c1.bias':
+            return gc1.data.view(-1)
         return None
 
-
-    def pre_model_generator(self,t,similarity,x):
-        pre_models = []
-        for pre_t in range(t):
-            if similarity[pre_t]==0:
-                continue
-            pre_gfc1,pre_gfc2=self.mask(torch.autograd.Variable(torch.LongTensor([pre_t]).cuda(),volatile=False),s=self.smax)
-
-            pre_h=self.drop1(x.view(x.size(0),-1))
-
-            pre_h=self.drop2(self.relu(self.mcl.fc1(pre_h))) #fc1 is changing
-            pre_h=pre_h*pre_gfc1.expand_as(pre_h)
-
-            pre_h=self.drop2(self.relu(self.mcl.fc2(pre_h)))
-            pre_h=pre_h*pre_gfc2.expand_as(pre_h)
-
-            pre_models.append(pre_h.clone())
-        return pre_models
 
 class MainContinualLearning(torch.nn.Module):
 
@@ -277,10 +210,17 @@ class MainContinualLearning(torch.nn.Module):
 
         super(MainContinualLearning, self).__init__()
 
+        self.c1=torch.nn.Conv2d(ncha,64,kernel_size=size//8)
+        s=utils.compute_conv_output_size(size,size//8)
+        s=s//2
+
+        self.smid=s
+
+        self.ec1=torch.nn.Embedding(len(taskcla),64)
         self.efc1=torch.nn.Embedding(len(taskcla),nhid)
         self.efc2=torch.nn.Embedding(len(taskcla),nhid)
 
-        self.fc1=torch.nn.Linear(ncha*size*size,nhid)
+        self.fc1=torch.nn.Linear(64*self.smid*self.smid,nhid)
         self.fc2=torch.nn.Linear(nhid,nhid)
 
         self.mask_last=torch.nn.ModuleList()
@@ -296,9 +236,14 @@ class TransferLayer(torch.nn.Module):
 
         super(TransferLayer, self).__init__()
 
-        self.fc1=torch.nn.Linear(ncha*size*size,nhid)
-        self.fc2=torch.nn.Linear(nhid,nhid)
+        self.c1=torch.nn.Conv2d(ncha,64,kernel_size=size//8)
+        s=utils.compute_conv_output_size(size,size//8)
+        s=s//2
+        self.smid=s
 
+        self.fc1=torch.nn.Linear(64*self.smid*self.smid,nhid)
+        self.fc2=torch.nn.Linear(nhid,nhid)
+        
         self.fusion = torch.nn.Linear(nhid*2,nhid)
 
 
@@ -326,6 +271,7 @@ class KnowledgeTransfer(torch.nn.Module):
         for t,n in taskcla:
             self.last.append(torch.nn.Linear(nhid,n))
 
+        self.ec1=torch.nn.Embedding(len(taskcla),64)
         self.efc1=torch.nn.Embedding(len(taskcla),nhid)
         self.efc2=torch.nn.Embedding(len(taskcla),nhid)
 

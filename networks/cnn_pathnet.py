@@ -55,13 +55,9 @@ class Net(torch.nn.Module):
         self.maxpool=torch.nn.MaxPool2d(2)
         self.relu=torch.nn.ReLU()
 
-        pdrop1=0.2
-        pdrop2=0.5
 
-        if args.pdrop1 >= 0:
-            pdrop1 = args.pdrop1
-        if args.pdrop2 >= 0:
-            pdrop2 = args.pdrop2
+        pdrop1 = args.pdrop1
+        pdrop2 = args.pdrop2
 
         self.drop1=torch.nn.Dropout(pdrop1)
         self.drop2=torch.nn.Dropout(pdrop2)
@@ -85,7 +81,7 @@ class Net(torch.nn.Module):
             self.last.append(torch.nn.Linear(self.sizefc2,n))
 
 
-        print('AlextnetPathNet')
+        print('CNN PathNet')
         print('pdrop1: ',pdrop1)
         print('pdrop2: ',pdrop2)
 

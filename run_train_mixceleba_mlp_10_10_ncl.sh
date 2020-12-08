@@ -14,5 +14,5 @@ do
 	--classptask 10 \
 	--idrandom $id \
 	--lr 0.025 \
-	--data_size small \
+	--data_size small 
 done
