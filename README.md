@@ -7,13 +7,17 @@
 
 # CAT (Continual learning with forgetting Avoidance and knowledge Transfer)
 
+
+## News
+[11/2021] **CAT** has been intergrated into [PyContinual](https://github.com/ZixuanKe/PyContinual). Check it out!
+
 This repository contains the code for the NeurIPS 2020 Paper [Continual Learning of a Mixed Sequence of Similar and Dissimilar Tasks](https://proceedings.neurips.cc/paper/2020/file/d7488039246a405baf6a7cbc3613a56f-Paper.pdf) by Zixuan Ke, [Bing Liu](https://www.cs.uic.edu/~liub/) and Xingchang Huang.
 
 <p align="center">
     <br>
     <a href="https://github.com/ZixuanKe/CAT">
         <img src="https://github.com/ZixuanKe/CAT/blob/main/CAT.png" width="800"/>
-    </a>
+    </a>    
     <br>
 <p>
 
